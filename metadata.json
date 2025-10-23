@@ -1,0 +1,7 @@
+{
+  "name": "Shared Expense Tracker",
+  "description": "A shared expense tracking application that allows users to manually add expenses or scan receipts to automatically parse items using Gemini. It provides a summary of expenses per person.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
