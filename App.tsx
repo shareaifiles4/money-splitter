@@ -94,20 +94,20 @@ export default function App() {
     }
   };
 
-  const handleSaveBatch = async (items: AssignedItem[]) => {
-    setLoading(true);
-    setLoadingMessage('Saving Items...');
-    try {
-      await addBatchExpenses(items);
-      await loadInitialExpenses();
-      handleNavigate('Home');
-    } catch (err) {
-      setError('Failed to save batch.');
-      showAlert('Save Error', 'Could not save the batch of expenses.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // const handleSaveBatch = async (items: AssignedItem[]) => {
+  //   setLoading(true);
+  //   setLoadingMessage('Saving Items...');
+  //   try {
+  //     await addBatchExpenses(items);
+  //     await loadInitialExpenses();
+  //     handleNavigate('Home');
+  //   } catch (err) {
+  //     setError('Failed to save batch.');
+  //     showAlert('Save Error', 'Could not save the batch of expenses.');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const handleFetchSummary = async (month: string, year: string) => {
     setLoading(true);
@@ -133,8 +133,8 @@ export default function App() {
         return <ManualEntryScreen onNavigate={handleNavigate} onSave={handleAddManual} showAlert={showAlert} />;
       case 'Scan':
         return <ScanScreen onNavigate={handleNavigate} onScan={handleScanReceipt} showAlert={showAlert} />;
-      case 'AssignItems':
-        return <AssignItemsScreen items={ocrResults} onNavigate={handleNavigate} onSaveBatch={handleSaveBatch} showAlert={showAlert} />;
+      // case 'AssignItems':
+      //   return <AssignItemsScreen items={ocrResults} onNavigate={handleNavigate} onSaveBatch={handleSaveBatch} showAlert={showAlert} />;
       case 'Summary':
         return <SummaryScreen onFetchSummary={handleFetchSummary} summary={summary} error={error} showAlert={showAlert} />;
       default:

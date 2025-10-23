@@ -1,60 +1,131 @@
+// geminiService.ts
+// This file acts as a live API Service for the application.
+import type { Expense, ScannedItem, Person } from '../types';
 
-import { Expense, SummaryData, AssignedItem } from '../types';
+const API_PROXY_URL = "/api"; // your proxy
 
-// !IMPORTANT: In a real application, you would replace the mock logic in these functions
-// with `fetch` calls to your actual Google Apps Script Web App URL.
-// const GOOGLE_APP_SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
+// Read URLs from environment variables
+const GOOGLE_APP_SCRIPT_URL =
+  process.env.GOOGLE_APP_SCRIPT_URL ||
+  "https://script.google.com/macros/s/AKfycbzb6GGNy_ZuZ1QGnjOZIkMg67ZfOUBPBvGN2DtH04YtwaM87ZYCvU5SO-TWSKyA_Dcq/exec";
 
-let mockExpenses: Expense[] = [
-    { id: '1', item: 'Apples', cost: 4.5, person: 'Zohair', date: '2025-10-22' },
-    { id: '2', item: 'Milk', cost: 1.8, person: 'Mohsin', date: '2025-10-21' },
-    { id: '3', item: 'Bread', cost: 2.2, person: 'Zohair', date: '2025-10-21' },
-];
+const OCR_API_URL =
+  process.env.OCR_API_URL || "https://your-ocr-api-endpoint.com/scan";
 
+// Helper function to check for missing environment variables
+const checkEnvVars = () => {
+  if (!GOOGLE_APP_SCRIPT_URL || !OCR_API_URL) {
+    console.error(
+      "Missing environment variables: GOOGLE_APP_SCRIPT_URL or OCR_API_URL is not set."
+    );
+    throw new Error(
+      "Application is not configured correctly. Please check environment variables."
+    );
+  }
+};
+
+// Helper function: format date to DD/MM/YYYY
+function formatDateToDMY(dateStr: string): string {
+  const date = new Date(dateStr);
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+type ManualExpense = Omit<Expense, "id">;
+
+// Fetch all expenses from Google Sheet
 export const fetchExpenses = async (): Promise<Expense[]> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve([...mockExpenses].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    }, 1000);
-  });
+  checkEnvVars();
+  const response = await fetch(`${GOOGLE_APP_SCRIPT_URL}?action=getExpenses`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch expenses from Google Sheet");
+  }
+  const data = await response.json();
+  return data.expenses || [];
 };
 
-export const addManualExpense = async (expense: Omit<Expense, 'id'>): Promise<{ success: boolean; newExpense: Expense }> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log('Added Expense:', expense);
-      const newExpense = { ...expense, id: Math.random().toString(36).substring(2, 9) };
-      mockExpenses.push(newExpense);
-      resolve({ success: true, newExpense });
-    }, 500);
+// Add a single manual expense via proxy
+export const addManualExpense = async (expense: ManualExpense) => {
+  // Format date before sending
+  const formattedExpense = { ...expense, date: formatDateToDMY(expense.date) };
+
+  // The path now directly matches your file in the /api folder
+  const response = await fetch(`${API_PROXY_URL}/addExpense`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(formattedExpense),
   });
+
+  if (!response.ok) {
+    throw new Error("Failed to add expense via proxy");
+  }
+
+  return await response.json();
 };
 
-export const addBatchExpenses = async (items: AssignedItem[]): Promise<{ success: boolean }> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log('Added Batch:', items);
-       const newExpenses: Expense[] = items.map(item => ({
-        ...item,
-        id: Math.random().toString(36).substring(2, 9),
-        person: item.person!,
-        date: new Date().toISOString().split('T')[0],
-      }));
-      mockExpenses.push(...newExpenses);
-      resolve({ success: true });
-    }, 1000);
+// Scan receipt via OCR API
+export const scanReceipt = async (imageUri: string): Promise<ScannedItem[]> => {
+  checkEnvVars();
+  const response = await fetch(OCR_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: imageUri }),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("OCR API Error:", errorText);
+    throw new Error("Failed to scan receipt with OCR service.");
+  }
+
+  const data = await response.json();
+  return data.items || [];
 };
 
-export const fetchSummary = async (month: string, year: string): Promise<SummaryData> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log('Fetching summary for:', month, year);
-      // This is a simplified mock. A real backend would filter by month/year.
-      resolve({
-        Zohair: 125.5,
-        Mohsin: 95.75,
-      });
-    }, 1000);
-  });
+// Add multiple expenses at once
+export const addBatchExpenses = async (
+  items: Omit<Expense, "id">[]
+): Promise<{ success: boolean }> => {
+  checkEnvVars();
+
+  // Format all dates
+  const formattedItems = items.map((item) => ({
+    ...item,
+    date: formatDateToDMY(item.date),
+  }));
+
+  const response = await fetch(
+    `${GOOGLE_APP_SCRIPT_URL}?action=addBatchExpenses`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: formattedItems }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to add batch expenses to Google Sheet");
+  }
+
+  return await response.json();
+};
+
+// Fetch summary of expenses for a given month/year
+export const fetchSummary = async (
+  month: string,
+  year: string
+): Promise<{ [key in Person]: number }> => {
+  checkEnvVars();
+  const response = await fetch(
+    `${GOOGLE_APP_SCRIPT_URL}?action=getSummary&month=${month}&year=${year}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch summary from Google Sheet");
+  }
+
+  const data = await response.json();
+  return data.summary || {};
 };
