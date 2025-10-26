@@ -1,66 +1,42 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
 import { OCRItem } from '../types';
 
-const receiptSchema = {
-    type: Type.ARRAY,
-    items: {
-        type: Type.OBJECT,
-        properties: {
-            item: {
-                type: Type.STRING,
-                description: 'The name of the purchased item, e.g., "Organic Milk" or "Apples". Exclude any promotional text, discounts, or item codes.',
-            },
-            cost: {
-                type: Type.NUMBER,
-                description: 'The final price of the item after any discounts. Do not include currency symbols.',
-            },
-        },
-        required: ['item', 'cost'],
-    },
-};
+const API_PROXY_URL = "/api/scanReceipt";
 
-export const scanReceipt = async (base64Image: string): Promise<OCRItem[]> => {
-    if (!process.env.API_KEY) {
-        console.error("API_KEY environment variable not set.");
-        throw new Error("API key is not configured.");
-    }
-    
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+export const scanReceipt = async (imageFile: File): Promise<OCRItem[]> => {
+    const formData = new FormData();
+    // The backend expects 'files' and 'language' fields.
+    formData.append('files', imageFile, imageFile.name);
+    formData.append('language', 'German');
 
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: {
-                parts: [
-                    {
-                        inlineData: {
-                            mimeType: 'image/jpeg',
-                            data: base64Image,
-                        },
-                    },
-                    {
-                        text: `Analyze this receipt. Extract each distinct item and its price. Ignore taxes, subtotals, totals, store information, and any other non-item text. Provide the output in the specified JSON format.`,
-                    },
-                ],
-            },
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: receiptSchema,
-            },
+        const response = await fetch(API_PROXY_URL, {
+            method: 'POST',
+            body: formData,
         });
-        
-        const jsonText = response.text.trim();
-        const parsedData = JSON.parse(jsonText);
 
-        if (Array.isArray(parsedData)) {
-            return parsedData.filter(item => item && typeof item.item === 'string' && typeof item.cost === 'number');
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error("OCR API Error:", errorBody);
+            throw new Error(`Failed to scan receipt. The server responded with status ${response.status}.`);
+        }
+
+        const data = await response.json();
+        
+        // The backend returns a specific JSON structure.
+        if (data.receipts && data.receipts.length > 0) {
+            const items = data.receipts[0].items;
+            return items.filter((item: any) => 
+                item && 
+                typeof item.item === 'string' && 
+                typeof item.price === 'number' && 
+                typeof item.quantity === 'number'
+            );
         }
 
         return [];
 
     } catch (error) {
-        console.error("Error scanning receipt with Gemini API:", error);
-        throw new Error("Failed to parse receipt. The image might be unclear or the format not recognized.");
+        console.error("Error calling the OCR service:", error);
+        throw new Error("Failed to connect to the receipt scanning service. Please check the proxy and backend.");
     }
 };

@@ -1,13 +1,14 @@
-
 export type Person = 'Zohair' | 'Mohsin';
+export type FilterPerson = Person | 'All';
 
 export interface OCRItem {
   item: string;
-  cost: number;
+  quantity: number;
+  price: number;
 }
 
 export interface AssignedItem extends OCRItem {
-  person: string | null;
+  person: Person | 'None' | null;
 }
 
 export interface SummaryData {
@@ -26,13 +27,5 @@ export interface Expense {
   cost: number;
   person: Person;
   date: string; // Using string as in user's example: '2025-10-22'
-}
-
-export interface ScannedItem {
-  item: string;
-  cost: number;
-}
-
-export interface AssignableScannedItem extends ScannedItem {
-    person: Person | null;
+  quantity: number;
 }

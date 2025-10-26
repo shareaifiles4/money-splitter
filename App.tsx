@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { Expense, OCRItem, SummaryData, AlertInfo, AssignedItem } from './types';
-import { fetchExpenses, addManualExpense, addBatchExpenses, fetchSummary } from './services/googleSheetsService';
+import { Expense, OCRItem, SummaryData, AlertInfo, AssignedItem, Person } from './types';
+import { fetchExpenses, addManualExpense, addBatchExpenses, fetchSummary, updateExpense } from './services/googleSheetsService';
 import { scanReceipt } from './services/geminiService';
 import HomeScreen from './screens/HomeScreen';
 import ManualEntryScreen from './screens/ManualEntryScreen';
@@ -9,6 +8,7 @@ import ScanScreen from './screens/ScanScreen';
 import AssignItemsScreen from './screens/AssignItemsScreen';
 import SummaryScreen from './screens/SummaryScreen';
 import AddExpenseModal from './modals/AddExpenseModal';
+import EditExpenseModal from './modals/EditExpenseModal';
 import CustomAlertModal from './components/CustomAlertModal';
 import LoadingOverlay from './components/LoadingOverlay';
 import BottomNav from './components/BottomNav';
@@ -19,6 +19,7 @@ type Screen = 'Home' | 'ManualEntry' | 'Scan' | 'AssignItems' | 'Summary';
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('Home');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [ocrResults, setOcrResults] = useState<OCRItem[]>([]);
@@ -73,41 +74,69 @@ export default function App() {
     }
   };
 
-  const handleScanReceipt = async (base64Image: string) => {
+  const handleUpdateExpense = async (expense: Expense) => {
     setLoading(true);
-    setLoadingMessage('Scanning Receipt...');
+    setLoadingMessage('Updating Expense...');
     try {
-      const items = await scanReceipt(base64Image);
-      if (items.length === 0) {
-        showAlert('Scan Unsuccessful', 'Could not find any items on the receipt. Please try a clearer image.');
-        setLoading(false);
-        return;
-      }
-      setOcrResults(items);
-      handleNavigate('AssignItems');
+      const { updatedExpense } = await updateExpense(expense);
+      // The backend should return the full updated object, including the ID
+      setExpenses(expenses.map(e => (e.id === updatedExpense.id ? updatedExpense : e)));
+      setEditingExpense(null); // Close modal on success
     } catch (err) {
-      setError('Failed to scan receipt.');
-      showAlert('Scan Error', (err as Error).message || 'An unknown error occurred during scanning.');
-      handleNavigate('Home');
+      setError('Failed to update expense.');
+      showAlert('Update Error', 'Could not update the expense.');
     } finally {
       setLoading(false);
     }
   };
 
-  // const handleSaveBatch = async (items: AssignedItem[]) => {
-  //   setLoading(true);
-  //   setLoadingMessage('Saving Items...');
-  //   try {
-  //     await addBatchExpenses(items);
-  //     await loadInitialExpenses();
-  //     handleNavigate('Home');
-  //   } catch (err) {
-  //     setError('Failed to save batch.');
-  //     showAlert('Save Error', 'Could not save the batch of expenses.');
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+  const handleScanReceipt = async (imageFile: File) => {
+    setLoading(true);
+    setLoadingMessage('Scanning Receipt...');
+    try {
+      const items = await scanReceipt(imageFile);
+      if (!items || items.length === 0) {
+        showAlert('Scan Unsuccessful', 'Could not detect any items on the receipt. Please try another image.');
+        // Stay on the same screen, loading will be turned off by finally
+      } else {
+        setOcrResults(items);
+        handleNavigate('AssignItems');
+      }
+    } catch (err) {
+      setError('Failed to process receipt.');
+      showAlert('Scan Error', err instanceof Error ? err.message : 'An unexpected error occurred while scanning.');
+      handleNavigate('Home'); // Navigate home on error
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveBatch = async (items: AssignedItem[]) => {
+    setLoading(true);
+    setLoadingMessage('Saving Items...');
+    try {
+      const itemsToSave = items
+        .filter(item => item.person && item.person !== 'None')
+        .map(item => ({
+          item: item.item,
+          cost: item.price * item.quantity, // Calculate total cost
+          person: item.person as Person,
+          date: new Date().toISOString().split('T')[0],
+          quantity: item.quantity,
+        }));
+
+      if (itemsToSave.length > 0) {
+        await addBatchExpenses(itemsToSave as Omit<Expense, 'id'>[]);
+      }
+      await loadInitialExpenses();
+      handleNavigate('Home');
+    } catch (err) {
+      setError('Failed to save batch.');
+      showAlert('Save Error', 'Could not save the batch of expenses.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleFetchSummary = async (month: string, year: string) => {
     setLoading(true);
@@ -128,17 +157,17 @@ export default function App() {
   const renderScreen = () => {
     switch (currentScreen) {
       case 'Home':
-        return <HomeScreen expenses={expenses} onShowAddModal={() => setShowAddModal(true)} />;
+        return <HomeScreen expenses={expenses} onShowAddModal={() => setShowAddModal(true)} onEditExpense={setEditingExpense} />;
       case 'ManualEntry':
         return <ManualEntryScreen onNavigate={handleNavigate} onSave={handleAddManual} showAlert={showAlert} />;
       case 'Scan':
         return <ScanScreen onNavigate={handleNavigate} onScan={handleScanReceipt} showAlert={showAlert} />;
-      // case 'AssignItems':
-      //   return <AssignItemsScreen items={ocrResults} onNavigate={handleNavigate} onSaveBatch={handleSaveBatch} showAlert={showAlert} />;
+      case 'AssignItems':
+        return <AssignItemsScreen items={ocrResults} onNavigate={handleNavigate} onSaveBatch={handleSaveBatch} showAlert={showAlert} />;
       case 'Summary':
         return <SummaryScreen onFetchSummary={handleFetchSummary} summary={summary} error={error} showAlert={showAlert} />;
       default:
-        return <HomeScreen expenses={expenses} onShowAddModal={() => setShowAddModal(true)} />;
+        return <HomeScreen expenses={expenses} onShowAddModal={() => setShowAddModal(true)} onEditExpense={setEditingExpense} />;
     }
   };
 
@@ -154,7 +183,17 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
         <div className="relative mx-auto min-h-screen max-w-md bg-gray-100 shadow-lg">
-            <main className="h-full pb-16">{renderScreen()}</main>
+            <main className="h-full pb-16">
+              {renderScreen()}
+
+              <EditExpenseModal
+                visible={!!editingExpense}
+                expense={editingExpense}
+                onClose={() => setEditingExpense(null)}
+                onSave={handleUpdateExpense}
+                showAlert={showAlert}
+              />
+            </main>
 
             {['Home', 'Summary'].includes(currentScreen) && (
                 <BottomNav currentScreen={currentScreen as 'Home' | 'Summary'} onNavigate={handleNavigate as (screen: 'Home' | 'Summary') => void} />

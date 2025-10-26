@@ -12,16 +12,25 @@ interface ManualEntryScreenProps {
 
 const ManualEntryScreen: React.FC<ManualEntryScreenProps> = ({ onNavigate, onSave, showAlert }) => {
   const [item, setItem] = useState('');
-  const [cost, setCost] = useState('');
+  const [price, setPrice] = useState('');
+  const [quantity, setQuantity] = useState('1');
   const [person, setPerson] = useState(PEOPLE[0]);
 
   const handleSave = () => {
-    const costFloat = parseFloat(cost);
-    if (!item.trim() || isNaN(costFloat) || costFloat <= 0) {
-      showAlert('Invalid Input', 'Please fill out all fields correctly. Cost must be a positive number.');
+    const priceFloat = parseFloat(price);
+    const quantityInt = parseInt(quantity, 10);
+
+    if (!item.trim() || isNaN(priceFloat) || priceFloat <= 0 || isNaN(quantityInt) || quantityInt <= 0 || !Number.isInteger(quantityInt)) {
+      showAlert('Invalid Input', 'Please fill out all fields correctly. Price and quantity must be positive whole numbers.');
       return;
     }
-    onSave({ item: item.trim(), cost: costFloat, person, date: new Date().toISOString().split('T')[0] });
+    onSave({ 
+      item: item.trim(), 
+      cost: priceFloat * quantityInt, 
+      person, 
+      date: new Date().toISOString().split('T')[0],
+      quantity: quantityInt,
+    });
   };
 
   return (
@@ -40,19 +49,33 @@ const ManualEntryScreen: React.FC<ManualEntryScreenProps> = ({ onNavigate, onSav
         </div>
 
         <div>
-          <label className="mb-2 block text-base font-medium text-gray-700">Cost ({CURRENCY})</label>
+          <label className="mb-2 block text-base font-medium text-gray-700">Price per item ({CURRENCY})</label>
           <input
             type="number"
             inputMode="decimal"
             className="w-full rounded-lg border border-gray-300 p-3 text-base text-gray-800 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
             placeholder="e.g., 2.99"
-            value={cost}
-            onChange={(e) => setCost(e.target.value)}
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+          />
+        </div>
+        
+        <div>
+          <label className="mb-2 block text-base font-medium text-gray-700">Quantity</label>
+          <input
+            type="number"
+            inputMode="numeric"
+            className="w-full rounded-lg border border-gray-300 p-3 text-base text-gray-800 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+            placeholder="e.g., 1"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            min="1"
+            step="1"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-base font-medium text-gray-700">Paid By</label>
+          <label className="mb-2 block text-base font-medium text-gray-700">Owes To</label>
           <div className="grid grid-cols-2 gap-3">
             {PEOPLE.map((p) => (
               <button

@@ -3,7 +3,7 @@ import fetch from 'node-fetch';
 
 const GOOGLE_APP_SCRIPT_URL = process.env.GOOGLE_APP_SCRIPT_URL;
 
-// This function will handle all requests to /api/addExpense
+// This function will handle all requests to /api/updateExpense
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
   if (req.method !== 'POST') {
@@ -12,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const response = await fetch(`${GOOGLE_APP_SCRIPT_URL}?action=addExpense`, {
+    const response = await fetch(`${GOOGLE_APP_SCRIPT_URL}?action=updateExpense`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req.body) // The request body is passed directly
